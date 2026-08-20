@@ -27,6 +27,7 @@ A native macOS menu bar app that automatically manages audio device priorities. 
 
 ### Requirements
 - macOS 13.0 (Ventura) or later
+- Xcode Command Line Tools (`xcode-select --install`) — the full Xcode app is not required
 
 ### Build from Source
 
@@ -36,12 +37,13 @@ A native macOS menu bar app that automatically manages audio device priorities. 
    cd AudioPriorityBar
    ```
 
-2. Build using the build script:
+2. Build:
    ```bash
-   ./build.sh
+   make
    ```
 
-3. The app will be at `dist/AudioPriorityBar.app`
+3. The app will be at `dist/AudioPriorityBar.app`. Install it with `make install`,
+   or rebuild-and-relaunch an installed copy with `make reinstall`.
 
 Or open `AudioPriorityBar.xcodeproj` in Xcode and build with ⌘R.
 
