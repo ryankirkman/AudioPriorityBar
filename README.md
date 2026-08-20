@@ -21,7 +21,7 @@ A native macOS menu bar app that automatically manages audio device priorities. 
 - **Per-category ignore**: Hide devices from specific categories without affecting others.
 - **Drag-to-reorder**: Reorder devices by dragging or using up/down arrows.
 - **Volume control**: Adjust volume with slider or scroll wheel.
-- **Menu bar integration**: Shows current mode icon and volume percentage.
+- **Menu bar integration**: The menu bar icon reflects the current mode (speakers, headphones, or custom), and becomes a mute indicator when the active output or input is muted.
 
 ## Installation
 

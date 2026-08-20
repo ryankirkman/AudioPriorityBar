@@ -10,36 +10,42 @@ struct AudioPriorityBarApp: App {
             MenuBarView()
                 .environmentObject(audioManager)
         } label: {
-            Image(systemName: "speaker.wave.2.fill")
+            MenuBarLabel(
+                isOutputMuted: audioManager.isActiveOutputMuted,
+                isInputMuted: audioManager.isActiveInputMuted,
+                isCustomMode: audioManager.isCustomMode,
+                mode: audioManager.currentMode,
+                micFlash: audioManager.micFlashState
+            )
         }
         .menuBarExtraStyle(.window)
     }
 }
 
+/// The menu bar fits a single symbol, so the label picks one icon by
+/// priority: alerts first, then whichever mode is active.
 struct MenuBarLabel: View {
-    let volume: Float
     let isOutputMuted: Bool
     let isInputMuted: Bool
     let isCustomMode: Bool
     let mode: OutputCategory
     let micFlash: Bool
 
-    var body: some View {
-        HStack(spacing: 2) {
-            if isInputMuted {
-                Image(systemName: micFlash ? "mic.fill" : "mic.slash.fill")
-            }
-            if isCustomMode {
-                Image(systemName: "hand.raised.fill")
-            } else if mode == .headphone {
-                Image(systemName: "headphones")
-            }
-            if isOutputMuted {
-                Image(systemName: "speaker.slash.fill")
-            } else {
-                Image(systemName: "speaker.wave.3.fill", variableValue: Double(volume))
-            }
+    private var symbol: String {
+        if isInputMuted {
+            return micFlash ? "mic.fill" : "mic.slash.fill"
         }
+        if isOutputMuted {
+            return "speaker.slash.fill"
+        }
+        if isCustomMode {
+            return "hand.raised.fill"
+        }
+        return mode.icon
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
     }
 }
 
@@ -92,10 +98,6 @@ class AudioManager: ObservableObject {
     private var micFlashTimer: Timer?
     let priorityManager = PriorityManager()
     private var connectedDeviceUIDs: Set<String> = []
-
-    var menuBarIcon: String {
-        currentMode.icon
-    }
 
     func refreshVolume() {
         volume = deviceService.getOutputVolume()
