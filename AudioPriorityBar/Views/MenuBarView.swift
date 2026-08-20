@@ -2,8 +2,22 @@ import SwiftUI
 import CoreAudio
 import AppKit
 
+/// Reports the natural height of the device list so the popover can size to it.
+private struct DeviceListHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct MenuBarView: View {
     @EnvironmentObject var audioManager: AudioManager
+
+    /// Measured height of the device list, capped at `maxListHeight` below.
+    /// Nil until the first layout pass, where the cap stands in for it.
+    @State private var listHeight: CGFloat?
+
+    private let maxListHeight: CGFloat = 420
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,8 +95,18 @@ struct MenuBarView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: DeviceListHeightKey.self, value: proxy.size.height)
+                    }
+                )
             }
-            .frame(maxHeight: 420)
+            // A bare `maxHeight` leaves the ScrollView's ideal height at zero, and
+            // MenuBarExtra's window sizes to the ideal — which collapses the list
+            // entirely. Measure the content and give the frame a definite height.
+            .frame(height: min(listHeight ?? maxListHeight, maxListHeight))
+            .onPreferenceChange(DeviceListHeightKey.self) { listHeight = $0 }
 
             Divider()
                 .padding(.horizontal, 12)
