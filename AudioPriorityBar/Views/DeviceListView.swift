@@ -14,8 +14,8 @@ struct DeviceListView: View {
     var category: OutputCategory? = nil
 
     // Only track which item is being dragged and the target - not the offset
-    @State private var draggingIndex: Int? = nil
-    @State private var targetIndex: Int? = nil
+    @ViewState private var draggingIndex: Int? = nil
+    @ViewState private var targetIndex: Int? = nil
     
     private let rowHeight: CGFloat = 32
 
@@ -102,8 +102,8 @@ struct DraggableDeviceRow: View {
     let onTargetChanged: (Int?) -> Void
     let onDragEnded: () -> Void
     
-    @State private var isHovering = false
-    @State private var lastReportedTarget: Int? = nil
+    @ViewState private var isHovering = false
+    @ViewState private var lastReportedTarget: Int? = nil
 
     var isDisconnected: Bool {
         !device.isConnected

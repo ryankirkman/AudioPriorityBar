@@ -2,6 +2,11 @@ import SwiftUI
 import CoreAudio
 import AppKit
 
+/// SwiftUI's `State` property wrapper under another name. From the macOS 27 SDK,
+/// `@State` resolves to a macro whose plugin ships only with full Xcode, so the
+/// Command Line Tools can't expand it. A typealias reaches the wrapper directly.
+typealias ViewState = SwiftUI.State
+
 /// Reports the natural height of the device list so the popover can size to it.
 private struct DeviceListHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
@@ -15,7 +20,7 @@ struct MenuBarView: View {
 
     /// Measured height of the device list, capped at `maxListHeight` below.
     /// Nil until the first layout pass, where the cap stands in for it.
-    @State private var listHeight: CGFloat?
+    @ViewState private var listHeight: CGFloat?
 
     private let maxListHeight: CGFloat = 420
 
@@ -364,7 +369,7 @@ struct DeviceSectionView: View {
 
 struct HiddenDevicesToggleView: View {
     @EnvironmentObject var audioManager: AudioManager
-    @State private var isExpanded = false
+    @ViewState private var isExpanded = false
 
     var allHiddenDevices: [AudioDevice] {
         audioManager.hiddenInputDevices +
@@ -410,7 +415,7 @@ struct HiddenDevicesToggleView: View {
 struct HiddenDeviceRow: View {
     @EnvironmentObject var audioManager: AudioManager
     let device: AudioDevice
-    @State private var isHovering = false
+    @ViewState private var isHovering = false
 
     var deviceIcon: String {
         if device.type == .input {
