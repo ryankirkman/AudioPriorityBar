@@ -40,43 +40,54 @@ class PriorityManager {
     private let deviceCategoriesKey = "deviceCategories"
     private let currentModeKey = "currentMode"
     private let customModeKey = "customMode"
-    private let hiddenDevicesKey = "hiddenDevices"
     private let knownDevicesKey = "knownDevices"
 
     // MARK: - Known Devices (Persistent Memory)
 
-    func getKnownDevices() -> [StoredDevice] {
+    /// Decoded from UserDefaults once; later reads come from memory.
+    private lazy var knownDevices: [StoredDevice] = {
         guard let data = defaults.data(forKey: knownDevicesKey),
               let devices = try? JSONDecoder().decode([StoredDevice].self, from: data) else {
             return []
         }
         return devices
+    }()
+
+    func getKnownDevices() -> [StoredDevice] {
+        knownDevices
     }
 
-    func rememberDevice(_ uid: String, name: String, isInput: Bool) {
-        var known = getKnownDevices()
+    /// Marks every connected device as seen now, in a single write. A device with both
+    /// inputs and outputs has one UID for the two, so entries are matched on direction too.
+    func rememberDevices(_ devices: [AudioDevice]) {
         let now = Date()
-        if let index = known.firstIndex(where: { $0.uid == uid }) {
-            // Update name and lastSeen
-            known[index] = StoredDevice(uid: uid, name: name, isInput: isInput, lastSeen: now)
-        } else {
-            known.append(StoredDevice(uid: uid, name: name, isInput: isInput, lastSeen: now))
+        for device in devices {
+            let entry = StoredDevice(uid: device.uid, name: device.name, isInput: device.type == .input, lastSeen: now)
+            if let index = storedIndex(of: device) {
+                knownDevices[index] = entry
+            } else {
+                knownDevices.append(entry)
+            }
         }
-        saveKnownDevices(known)
+        saveKnownDevices()
     }
 
-    func getStoredDevice(uid: String) -> StoredDevice? {
-        getKnownDevices().first { $0.uid == uid }
+    func getStoredDevice(for device: AudioDevice) -> StoredDevice? {
+        storedIndex(of: device).map { knownDevices[$0] }
     }
 
-    func forgetDevice(_ uid: String) {
-        var known = getKnownDevices()
-        known.removeAll { $0.uid == uid }
-        saveKnownDevices(known)
+    func forgetDevice(_ device: AudioDevice) {
+        guard let index = storedIndex(of: device) else { return }
+        knownDevices.remove(at: index)
+        saveKnownDevices()
     }
 
-    private func saveKnownDevices(_ devices: [StoredDevice]) {
-        if let data = try? JSONEncoder().encode(devices) {
+    private func storedIndex(of device: AudioDevice) -> Int? {
+        knownDevices.firstIndex { $0.uid == device.uid && $0.isInput == (device.type == .input) }
+    }
+
+    private func saveKnownDevices() {
+        if let data = try? JSONEncoder().encode(knownDevices) {
             defaults.set(data, forKey: knownDevicesKey)
         }
     }
@@ -241,16 +252,29 @@ class PriorityManager {
 
     private func sortDevices(_ devices: [AudioDevice], usingKey key: String) -> [AudioDevice] {
         let priorities = defaults.array(forKey: key) as? [String] ?? []
+        let rank = Dictionary(priorities.enumerated().map { ($1, $0) }, uniquingKeysWith: min)
 
         return devices.sorted { a, b in
-            let indexA = priorities.firstIndex(of: a.uid) ?? Int.max
-            let indexB = priorities.firstIndex(of: b.uid) ?? Int.max
-            return indexA < indexB
+            (rank[a.uid] ?? Int.max) < (rank[b.uid] ?? Int.max)
         }
     }
 
+    /// Saves the new order of `devices` without losing the place of devices that aren't in
+    /// the list right now (disconnected or ignored ones). Those keep their slots; the listed
+    /// devices are dealt, in their new order, into the slots they held between them.
     private func savePriorities(_ devices: [AudioDevice], key: String) {
-        let uids = devices.map { $0.uid }
-        defaults.set(uids, forKey: key)
+        var reordered = devices.map { $0.uid }[...]
+        let listed = Set(reordered)
+        let stored = defaults.array(forKey: key) as? [String] ?? []
+        var merged: [String] = []
+        for uid in stored {
+            if !listed.contains(uid) {
+                merged.append(uid)
+            } else if let next = reordered.popFirst() {
+                merged.append(next)
+            }
+        }
+        merged.append(contentsOf: reordered)   // devices that had no saved priority yet
+        defaults.set(merged, forKey: key)
     }
 }

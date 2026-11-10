@@ -48,17 +48,10 @@ struct MenuBarView: View {
                             devices: audioManager.speakerDevices,
                             currentDeviceId: audioManager.currentOutputId,
                             onMove: audioManager.moveSpeakerDevice,
-                            onSelect: { device in
-                                if !audioManager.isCustomMode {
-                                    audioManager.setMode(.speaker)
-                                }
-                                audioManager.setOutputDevice(device)
-                            },
+                            onSelect: audioManager.setOutputDevice,
                             onHide: { audioManager.hideDevice($0, category: .speaker) },
-                            onUnhide: { audioManager.unhideDevice($0, category: .speaker) },
                             category: .speaker,
-                            showCategoryPicker: true,
-                            isActiveCategory: audioManager.currentMode == .speaker || audioManager.isCustomMode
+                            showCategoryPicker: true
                         )
                     }
 
@@ -70,17 +63,10 @@ struct MenuBarView: View {
                             devices: audioManager.headphoneDevices,
                             currentDeviceId: audioManager.currentOutputId,
                             onMove: audioManager.moveHeadphoneDevice,
-                            onSelect: { device in
-                                if !audioManager.isCustomMode {
-                                    audioManager.setMode(.headphone)
-                                }
-                                audioManager.setOutputDevice(device)
-                            },
+                            onSelect: audioManager.setOutputDevice,
                             onHide: { audioManager.hideDevice($0, category: .headphone) },
-                            onUnhide: { audioManager.unhideDevice($0, category: .headphone) },
                             category: .headphone,
-                            showCategoryPicker: true,
-                            isActiveCategory: audioManager.currentMode == .headphone || audioManager.isCustomMode
+                            showCategoryPicker: true
                         )
                     }
 
@@ -93,7 +79,6 @@ struct MenuBarView: View {
                         onMove: audioManager.moveInputDevice,
                         onSelect: audioManager.setInputDevice,
                         onHide: { audioManager.hideDevice($0, category: nil) },
-                        onUnhide: { audioManager.unhideDevice($0, category: nil) },
                         category: nil,
                         showCategoryPicker: false
                     )
@@ -326,17 +311,15 @@ struct DeviceSectionView: View {
     let onMove: (IndexSet, Int) -> Void
     let onSelect: (AudioDevice) -> Void
     var onHide: ((AudioDevice) -> Void)?
-    var onUnhide: ((AudioDevice) -> Void)?
     var category: OutputCategory?
     var showCategoryPicker: Bool = false
-    var isActiveCategory: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
-                    .foregroundColor(isActiveCategory ? .accentColor : .secondary)
+                    .foregroundColor(.accentColor)
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
@@ -359,7 +342,6 @@ struct DeviceSectionView: View {
                     onSelect: onSelect,
                     showCategoryPicker: showCategoryPicker,
                     onHide: onHide,
-                    onUnhide: onUnhide,
                     category: category
                 )
             }
@@ -401,7 +383,7 @@ struct HiddenDevicesToggleView: View {
             .buttonStyle(.plain)
             .popover(isPresented: $isExpanded, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(allHiddenDevices, id: \.id) { device in
+                    ForEach(allHiddenDevices, id: \.listID) { device in
                         HiddenDeviceRow(device: device)
                     }
                 }
@@ -470,12 +452,13 @@ struct HiddenDeviceRow: View {
 }
 
 struct LaunchAtLoginToggle: View {
-    @StateObject private var launchManager = LaunchAtLoginManager.shared
-    
+    @ObservedObject private var launchManager = LaunchAtLoginManager.shared
+
+
     var body: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.15)) {
-                launchManager.isEnabled.toggle()
+                launchManager.toggle()
             }
         } label: {
             HStack(spacing: 4) {
@@ -488,5 +471,6 @@ struct LaunchAtLoginToggle: View {
         }
         .buttonStyle(.plain)
         .help(launchManager.isEnabled ? "Disable launch at login" : "Enable launch at login")
+        .onAppear { launchManager.refresh() }
     }
 }

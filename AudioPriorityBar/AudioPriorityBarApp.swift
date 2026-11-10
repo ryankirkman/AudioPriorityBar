@@ -49,32 +49,6 @@ struct MenuBarLabel: View {
     }
 }
 
-struct VolumeMeterView: View {
-    let volume: Float
-    let isMuted: Bool
-    private let barCount = 4
-    private let barSpacing: CGFloat = 1
-
-    var body: some View {
-        Canvas { context, size in
-            let barWidth = (size.width - CGFloat(barCount - 1) * barSpacing) / CGFloat(barCount)
-            let filledBars = isMuted ? 0 : Int(ceil(Double(volume) * Double(barCount)))
-            for i in 0..<barCount {
-                let x = CGFloat(i) * (barWidth + barSpacing)
-                let barHeight = size.height * CGFloat(i + 1) / CGFloat(barCount)
-                let y = size.height - barHeight
-                let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
-                let path = Path(roundedRect: rect, cornerRadius: 1)
-                if i < filledBars {
-                    context.fill(path, with: .color(isMuted ? .red : .primary))
-                } else {
-                    context.fill(path, with: .color(.primary.opacity(0.25)))
-                }
-            }
-        }
-    }
-}
-
 @MainActor
 class AudioManager: ObservableObject {
     @Published var inputDevices: [AudioDevice] = []
@@ -89,7 +63,9 @@ class AudioManager: ObservableObject {
     @Published var volume: Float = 0
     @Published var isEditMode: Bool = false
     @Published var isCustomMode: Bool = false
-    @Published var mutedDeviceIds: Set<AudioObjectID> = []
+    // Kept per direction: a device with inputs and outputs has one ID for both.
+    @Published var mutedInputIds: Set<AudioObjectID> = []
+    @Published var mutedOutputIds: Set<AudioObjectID> = []
     @Published var isActiveOutputMuted: Bool = false
     @Published var isActiveInputMuted: Bool = false
     @Published var micFlashState: Bool = false
@@ -104,33 +80,22 @@ class AudioManager: ObservableObject {
     }
 
     func refreshMuteStatus() {
-        var muted: Set<AudioObjectID> = []
+        var mutedInputs: Set<AudioObjectID> = []
         for device in inputDevices where device.isConnected {
             if deviceService.isDeviceMuted(device.id, type: .input) {
-                muted.insert(device.id)
+                mutedInputs.insert(device.id)
             }
         }
-        for device in speakerDevices where device.isConnected {
+        var mutedOutputs: Set<AudioObjectID> = []
+        for device in speakerDevices + headphoneDevices where device.isConnected {
             if deviceService.isDeviceMuted(device.id, type: .output) {
-                muted.insert(device.id)
+                mutedOutputs.insert(device.id)
             }
         }
-        for device in headphoneDevices where device.isConnected {
-            if deviceService.isDeviceMuted(device.id, type: .output) {
-                muted.insert(device.id)
-            }
-        }
-        mutedDeviceIds = muted
-        if let outputId = currentOutputId {
-            isActiveOutputMuted = muted.contains(outputId)
-        } else {
-            isActiveOutputMuted = false
-        }
-        if let inputId = currentInputId {
-            isActiveInputMuted = muted.contains(inputId)
-        } else {
-            isActiveInputMuted = false
-        }
+        mutedInputIds = mutedInputs
+        mutedOutputIds = mutedOutputs
+        isActiveOutputMuted = currentOutputId.map(mutedOutputs.contains) ?? false
+        isActiveInputMuted = currentInputId.map(mutedInputs.contains) ?? false
         if isActiveInputMuted && micFlashTimer == nil {
             micFlashTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
                 Task { @MainActor in
@@ -145,7 +110,7 @@ class AudioManager: ObservableObject {
     }
 
     func isDeviceMuted(_ device: AudioDevice) -> Bool {
-        mutedDeviceIds.contains(device.id)
+        (device.type == .input ? mutedInputIds : mutedOutputIds).contains(device.id)
     }
 
     func setVolume(_ newVolume: Float) {
@@ -170,6 +135,8 @@ class AudioManager: ObservableObject {
         setupDeviceChangeListener()
         setupMuteVolumeListener()
         if !isCustomMode {
+            // Covers quitting on headphones and launching without them.
+            autoSwitchModeIfNeeded(newlyConnectedUIDs: [])
             applyHighestPriorityInput()
             applyHighestPriorityOutput()
         }
@@ -191,9 +158,7 @@ class AudioManager: ObservableObject {
     func refreshDevices() {
         let allConnectedDevices = deviceService.getDevices()
         connectedDeviceUIDs = Set(allConnectedDevices.map { $0.uid })
-        for device in allConnectedDevices {
-            priorityManager.rememberDevice(device.uid, name: device.name, isInput: device.type == .input)
-        }
+        priorityManager.rememberDevices(allConnectedDevices)
         let connectedInputs = allConnectedDevices.filter { $0.type == .input }
         let connectedOutputs = allConnectedDevices.filter { $0.type == .output }
 
@@ -251,10 +216,6 @@ class AudioManager: ObservableObject {
         refreshDevices()
     }
 
-    func isDeviceConnected(_ device: AudioDevice) -> Bool {
-        connectedDeviceUIDs.contains(device.uid)
-    }
-
     /// Tracks device UIDs from the previous refresh to detect new connections
     private var previousConnectedUIDs: Set<String> = []
     
@@ -264,11 +225,6 @@ class AudioManager: ObservableObject {
         if !isCustomMode {
             applyHighestPriorityOutput()
         }
-    }
-
-    func toggleMode() {
-        let newMode: OutputCategory = currentMode == .speaker ? .headphone : .speaker
-        setMode(newMode)
     }
 
     func setCustomMode(_ enabled: Bool) {
@@ -355,27 +311,24 @@ class AudioManager: ObservableObject {
     func moveInputDevice(from source: IndexSet, to destination: Int) {
         inputDevices.move(fromOffsets: source, toOffset: destination)
         priorityManager.savePriorities(inputDevices, type: .input)
-        // Switch to top input if it's connected
-        if let topInput = inputDevices.first, topInput.isConnected {
-            applyInputDevice(topInput)
+        if !isCustomMode {
+            applyHighestPriorityInput()
         }
     }
 
     func moveSpeakerDevice(from source: IndexSet, to destination: Int) {
         speakerDevices.move(fromOffsets: source, toOffset: destination)
         priorityManager.savePriorities(speakerDevices, category: .speaker)
-        // Switch to top speaker only if we're in speaker mode and top speaker is connected
-        if currentMode == .speaker, let topSpeaker = speakerDevices.first, topSpeaker.isConnected {
-            applyOutputDevice(topSpeaker)
+        if !isCustomMode {
+            applyHighestPriorityOutput()
         }
     }
 
     func moveHeadphoneDevice(from source: IndexSet, to destination: Int) {
         headphoneDevices.move(fromOffsets: source, toOffset: destination)
         priorityManager.savePriorities(headphoneDevices, category: .headphone)
-        // Switch to top headphone if it's connected
-        if let topHeadphone = headphoneDevices.first, topHeadphone.isConnected {
-            applyOutputDevice(topHeadphone)
+        if !isCustomMode {
+            applyHighestPriorityOutput()
         }
     }
 
@@ -397,15 +350,20 @@ class AudioManager: ObservableObject {
         currentOutputId = device.id
     }
 
+    /// Whether auto-switching may pick this device. Edit mode lists ignored devices too,
+    /// so being in a list isn't enough.
+    private func isAutoSelectable(_ device: AudioDevice) -> Bool {
+        device.isConnected && !priorityManager.isNeverUse(device) && !priorityManager.isHidden(device)
+    }
+
     private func applyHighestPriorityInput() {
-        if let first = inputDevices.first(where: { $0.isConnected && !priorityManager.isNeverUse($0) }) {
+        if let first = inputDevices.first(where: isAutoSelectable) {
             applyInputDevice(first)
         }
     }
 
     private func applyHighestPriorityOutput() {
-        let devices = activeOutputDevices
-        if let first = devices.first(where: { $0.isConnected && !priorityManager.isNeverUse($0) }) {
+        if let first = activeOutputDevices.first(where: isAutoSelectable) {
             applyOutputDevice(first)
         }
         refreshMuteStatus()
@@ -424,7 +382,8 @@ class AudioManager: ObservableObject {
         let oldConnectedUIDs = previousConnectedUIDs
         refreshDevices()
         refreshMuteStatus()
-        
+        refreshVolume()   // the default output may be a different device now
+
         // Detect newly connected devices
         let newlyConnectedUIDs = connectedDeviceUIDs.subtracting(oldConnectedUIDs)
         previousConnectedUIDs = connectedDeviceUIDs
@@ -442,9 +401,9 @@ class AudioManager: ObservableObject {
     /// 1. A new headphone device connects → switch to headphone mode
     /// 2. All headphones disconnect → switch to speaker mode
     private func autoSwitchModeIfNeeded(newlyConnectedUIDs: Set<String>) {
-        let connectedHeadphones = headphoneDevices.filter { $0.isConnected }
+        let connectedHeadphones = headphoneDevices.filter(isAutoSelectable)
         let hasConnectedHeadphones = !connectedHeadphones.isEmpty
-        let hasConnectedSpeakers = speakerDevices.contains { $0.isConnected }
+        let hasConnectedSpeakers = speakerDevices.contains(where: isAutoSelectable)
         
         // Check if a new headphone just connected
         let newHeadphoneConnected = connectedHeadphones.contains { newlyConnectedUIDs.contains($0.uid) }

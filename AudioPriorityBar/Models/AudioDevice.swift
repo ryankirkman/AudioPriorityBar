@@ -32,8 +32,10 @@ struct AudioDevice: Identifiable, Equatable, Hashable {
     let type: AudioDeviceType
     var isConnected: Bool = true
 
-    var isValid: Bool {
-        id != kAudioObjectUnknown
+    /// Identity for SwiftUI lists. `id` can't serve: disconnected placeholders all share
+    /// id 0, and a device with inputs and outputs appears once per direction.
+    var listID: String {
+        "\(type.rawValue):\(uid)"
     }
 
     // Create a disconnected placeholder from stored device
