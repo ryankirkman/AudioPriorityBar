@@ -7,10 +7,11 @@ class AudioDeviceService {
     var onMuteOrVolumeChanged: (() -> Void)?
 
     private var listenerBlock: AudioObjectPropertyListenerBlock?
+    private var deviceListListenerBlock: AudioObjectPropertyListenerBlock?
     private var muteVolumeListenerBlock: AudioObjectPropertyListenerBlock?
     private var monitoredDeviceIds: Set<AudioObjectID> = []
 
-    func getDevices() -> [AudioDevice] {
+    private func allDeviceIds() -> [AudioObjectID] {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -42,9 +43,13 @@ class AudioDeviceService {
 
         guard status == noErr else { return [] }
 
+        return deviceIds
+    }
+
+    func getDevices() -> [AudioDevice] {
         var devices: [AudioDevice] = []
 
-        for deviceId in deviceIds {
+        for deviceId in allDeviceIds() {
             if let inputDevice = createDevice(id: deviceId, type: .input) {
                 devices.append(inputDevice)
             }
@@ -108,26 +113,7 @@ class AudioDeviceService {
 
     func getOutputVolume() -> Float {
         guard let deviceId = getCurrentDefaultDevice(type: .output) else { return 0 }
-
-        var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var volume: Float32 = 0
-        var dataSize = UInt32(MemoryLayout<Float32>.size)
-
-        let status = AudioObjectGetPropertyData(
-            deviceId,
-            &propertyAddress,
-            0,
-            nil,
-            &dataSize,
-            &volume
-        )
-
-        return status == noErr ? volume : 0
+        return outputVolume(of: deviceId) ?? 0
     }
 
     func setOutputVolume(_ volume: Float) {
@@ -197,8 +183,7 @@ class AudioDeviceService {
 
         // Check if volume is essentially zero (some devices report this as muted)
         if type == .output {
-            let volume = getDeviceVolume(deviceId)
-            if volume < 0.01 {
+            if let volume = outputVolume(of: deviceId), volume < 0.01 {
                 return true
             }
         }
@@ -206,7 +191,8 @@ class AudioDeviceService {
         return false
     }
 
-    func getDeviceVolume(_ deviceId: AudioObjectID) -> Float {
+    /// The device's main output volume, or nil if it has no volume control.
+    private func outputVolume(of deviceId: AudioObjectID) -> Float? {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
             mScope: kAudioDevicePropertyScopeOutput,
@@ -225,7 +211,7 @@ class AudioDeviceService {
             &volume
         )
 
-        return status == noErr ? volume : 1.0
+        return status == noErr ? volume : nil
     }
 
     func startListening() {
@@ -237,7 +223,11 @@ class AudioDeviceService {
 
         listenerBlock = { [weak self] _, _ in
             self?.onDevicesChanged?()
-            // Re-register mute/volume listeners when devices change
+        }
+        // Only a change to the device list needs the per-device mute/volume listeners
+        // re-registered; a change of default device doesn't.
+        deviceListListenerBlock = { [weak self] _, _ in
+            self?.onDevicesChanged?()
             self?.updateMuteVolumeListeners()
         }
 
@@ -245,7 +235,7 @@ class AudioDeviceService {
             AudioObjectID(kAudioObjectSystemObject),
             &propertyAddress,
             DispatchQueue.main,
-            listenerBlock!
+            deviceListListenerBlock!
         )
 
         // Also listen to default device changes
@@ -277,7 +267,7 @@ class AudioDeviceService {
         updateMuteVolumeListeners()
     }
 
-    func updateMuteVolumeListeners() {
+    private func updateMuteVolumeListeners() {
         // Remove old listeners
         removeMuteVolumeListeners()
 
@@ -286,40 +276,8 @@ class AudioDeviceService {
             self?.onMuteOrVolumeChanged?()
         }
 
-        // Get all current device IDs
-        var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var dataSize: UInt32 = 0
-        var status = AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject),
-            &propertyAddress,
-            0,
-            nil,
-            &dataSize
-        )
-
-        guard status == noErr else { return }
-
-        let deviceCount = Int(dataSize) / MemoryLayout<AudioObjectID>.size
-        var deviceIds = [AudioObjectID](repeating: 0, count: deviceCount)
-
-        status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &propertyAddress,
-            0,
-            nil,
-            &dataSize,
-            &deviceIds
-        )
-
-        guard status == noErr else { return }
-
         // Register listeners for each device
-        for deviceId in deviceIds {
+        for deviceId in allDeviceIds() {
             // Listen to mute on output scope
             var muteAddress = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyMute,
@@ -389,7 +347,7 @@ class AudioDeviceService {
         // Remove mute/volume listeners first
         removeMuteVolumeListeners()
 
-        guard let block = listenerBlock else { return }
+        guard let block = listenerBlock, let deviceListBlock = deviceListListenerBlock else { return }
 
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -401,7 +359,7 @@ class AudioDeviceService {
             AudioObjectID(kAudioObjectSystemObject),
             &propertyAddress,
             DispatchQueue.main,
-            block
+            deviceListBlock
         )
 
         // Also remove default device change listeners
@@ -430,6 +388,7 @@ class AudioDeviceService {
         )
 
         listenerBlock = nil
+        deviceListListenerBlock = nil
     }
 
     private func createDevice(id: AudioObjectID, type: AudioDeviceType) -> AudioDevice? {
@@ -465,36 +424,23 @@ class AudioDeviceService {
     }
 
     private func getDeviceName(id: AudioObjectID) -> String? {
-        var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceNameCFString,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        var name: CFString?
-        var dataSize = UInt32(MemoryLayout<CFString?>.size)
-
-        let status = AudioObjectGetPropertyData(
-            id,
-            &propertyAddress,
-            0,
-            nil,
-            &dataSize,
-            &name
-        )
-
-        return status == noErr ? name as String? : nil
+        stringProperty(kAudioDevicePropertyDeviceNameCFString, of: id)
     }
 
     private func getDeviceUID(id: AudioObjectID) -> String? {
+        stringProperty(kAudioDevicePropertyDeviceUID, of: id)
+    }
+
+    private func stringProperty(_ selector: AudioObjectPropertySelector, of id: AudioObjectID) -> String? {
         var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceUID,
+            mSelector: selector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
 
-        var uid: CFString?
-        var dataSize = UInt32(MemoryLayout<CFString?>.size)
+        // CoreAudio hands back a retained CFString; Unmanaged takes ownership of it.
+        var value: Unmanaged<CFString>?
+        var dataSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
 
         let status = AudioObjectGetPropertyData(
             id,
@@ -502,10 +448,11 @@ class AudioDeviceService {
             0,
             nil,
             &dataSize,
-            &uid
+            &value
         )
 
-        return status == noErr ? uid as String? : nil
+        guard status == noErr else { return nil }
+        return value?.takeRetainedValue() as String?
     }
 
     deinit {
