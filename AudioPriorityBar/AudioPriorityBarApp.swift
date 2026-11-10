@@ -4,7 +4,11 @@ import CoreAudio
 @main
 struct AudioPriorityBarApp: App {
     @StateObject private var audioManager = AudioManager()
-    
+
+    init() {
+        LoginItemCommand.runIfRequested()   // exits if a command-line flag asked for one
+    }
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarView()

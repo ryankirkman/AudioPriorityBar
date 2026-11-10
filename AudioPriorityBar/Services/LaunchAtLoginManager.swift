@@ -30,3 +30,26 @@ class LaunchAtLoginManager: ObservableObject {
         }
     }
 }
+
+/// `AudioPriorityBar --register-login-item` is the same as switching "Login" on in the
+/// popover; `--unregister-login-item` is used by `make uninstall`, because the registration
+/// lives with the system, not in the bundle, and only the app itself can remove it.
+enum LoginItemCommand {
+    static func runIfRequested() {
+        let arguments = CommandLine.arguments
+        if arguments.contains("--unregister-login-item") {
+            try? SMAppService.mainApp.unregister()
+            exit(0)
+        }
+        if arguments.contains("--register-login-item") {
+            do {
+                try SMAppService.mainApp.register()
+                print("Launch at login: on")
+            } catch {
+                print("Couldn't turn on launch at login: \(error.localizedDescription)")
+                exit(1)
+            }
+            exit(0)
+        }
+    }
+}

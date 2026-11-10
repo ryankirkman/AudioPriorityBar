@@ -61,6 +61,7 @@ reinstall: all
 	open /Applications/$(APP).app
 
 uninstall:
+	-/Applications/$(APP).app/Contents/MacOS/$(APP) --unregister-login-item
 	-pkill -x $(APP)
 	rm -rf /Applications/$(APP).app
 	-defaults delete $(BUNDLE_ID)
