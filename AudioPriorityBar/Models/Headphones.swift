@@ -2,39 +2,31 @@ import Foundation
 
 /// Keywords used to detect headphone-like devices and auto-categorize them
 struct HeadphoneDetection {
-    /// Device name keywords that indicate headphones/earbuds
+    /// Device name keywords that indicate headphones/earbuds. Matched as lowercase
+    /// substrings, so each one has to be specific enough not to turn up inside other
+    /// words ("ear" is in "UltraGear") or to cover a brand's speakers as well.
     static let keywords: [String] = [
         // Generic terms
         "headphone",
         "headset",
         "earphone",
         "earbud",
-        "earbuds",
-        "buds",
-        "ear",
-        "pods",
+        "buds",     // Galaxy Buds, Pixel Buds, LinkBuds, FreeBuds, ...
 
         // Apple
         "airpods",
         "earpods",
-        "beats",
         "powerbeats",
         "beatsx",
         "beats fit",
+        "beats flex",
         "beats solo",
         "beats studio",
 
         // Sony
         "wh-1000",  // WH-1000XM series
         "wf-1000",  // WF-1000XM series
-        "linkbuds",
         "inzone",
-
-        // Samsung
-        "galaxy buds",
-        "buds pro",
-        "buds live",
-        "buds fe",
 
         // Bose
         "quietcomfort",
@@ -42,7 +34,6 @@ struct HeadphoneDetection {
         "qc45",
         "qc35",
         "soundsport",
-        "sport earbuds",
 
         // Sennheiser
         "momentum",
@@ -51,9 +42,9 @@ struct HeadphoneDetection {
         "pxc",
 
         // Jabra
-        "jabra",
-        "elite",
-        "evolve",
+        "jabra elite",
+        "jabra evolve",
+        "evolve2",
 
         // JBL
         "jbl tune",
@@ -62,38 +53,40 @@ struct HeadphoneDetection {
         "jbl reflect",
 
         // Other brands
-        "anker",
-        "soundcore",
+        "soundcore liberty",
+        "soundcore life",
+        "soundcore space",
         "skullcandy",
         "nothing ear",
-        "oneplus buds",
-        "pixel buds",
-        "huawei freebuds",
         "oppo enco",
         "technics eah",
-        "bowers",
         "b&w px",
+        "beoplay h",
         "denon perl",
         "focal bathys",
         "hifiman",
         "shure aonic",
         "audio-technica ath",
         "beyerdynamic",
-        "marshall",
-        "bang & olufsen",
-        "b&o",
-        "akg",
+        "marshall major",
+        "marshall monitor",
+        "marshall motif",
+        "akg k",
+        "akg n",
         "plantronics",
-        "poly",
-        "razer",
-        "steelseries",
-        "hyperx",
+        "voyager",
+        "razer kraken",
+        "razer blackshark",
+        "razer barracuda",
+        "steelseries arctis",
+        "hyperx cloud",
         "logitech g pro",
-        "astro",
-        "corsair",
+        "astro a",
+        "corsair hs",
+        "corsair void",
+        "corsair virtuoso",
         "1more",
         "tozo",
-        "edifier",
         "fiio",
         "moondrop",
     ]
