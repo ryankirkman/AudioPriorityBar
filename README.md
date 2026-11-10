@@ -4,7 +4,7 @@
   <img src="icon.png" width="128" height="128" alt="Audio Priority Bar Icon">
 </p>
 
-A native macOS menu bar app that automatically manages audio device priorities. Set your preferred order for speakers, headphones, and microphones - the app automatically switches to the highest-priority connected device.
+A native macOS menu bar app that automatically manages audio device priorities. This is a fork of [tobi/AudioPriorityBar](https://github.com/tobi/AudioPriorityBar) that builds with just the Xcode Command Line Tools. Set your preferred order for speakers, headphones, and microphones - the app automatically switches to the highest-priority connected device.
 
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange)
@@ -19,7 +19,7 @@ A native macOS menu bar app that automatically manages audio device priorities. 
 - **Manual override**: Enable "Custom" mode (hand icon) to disable auto-switching and select devices freely.
 - **Device memory**: Remembers all devices you've ever connected, even when disconnected. Edit mode shows disconnected devices with "last seen" timestamps.
 - **Per-category ignore**: Hide devices from specific categories without affecting others.
-- **Drag-to-reorder**: Reorder devices by dragging or using up/down arrows.
+- **Drag-to-reorder**: Reorder devices by dragging.
 - **Volume control**: Adjust volume with slider or scroll wheel.
 - **Menu bar integration**: The menu bar icon reflects the current mode (speakers, headphones, or custom), and becomes a mute indicator when the active output or input is muted.
 
@@ -33,7 +33,7 @@ A native macOS menu bar app that automatically manages audio device priorities. 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/tobi/AudioPriorityBar.git
+   git clone https://github.com/ryankirkman/AudioPriorityBar.git
    cd AudioPriorityBar
    ```
 
@@ -48,7 +48,7 @@ A native macOS menu bar app that automatically manages audio device priorities. 
 Or open `AudioPriorityBar.xcodeproj` in Xcode and build with ⌘R.
 
 ### Download Release
-Check the [Releases](https://github.com/tobi/AudioPriorityBar/releases) page for pre-built binaries.
+Check the [Releases](https://github.com/ryankirkman/AudioPriorityBar/releases) page for pre-built binaries.
 
 ## Usage
 
@@ -62,15 +62,15 @@ Check the [Releases](https://github.com/tobi/AudioPriorityBar/releases) page for
 
 ### Managing Priorities
 
-- **Click a device**: Moves it to #1 priority (in normal mode) or just selects it (in custom mode)
-- **Drag devices**: Reorder by dragging the handle
-- **Up/Down arrows**: Fine-tune order on hover
+- **Drag devices**: Reorder by dragging a row. The highest-priority connected device becomes active.
+- **Click a device**: Selects it (custom mode only; in the other modes the priority order decides)
 
 ### Device Actions (hover menu)
 
 - **Move to Speakers/Headphones**: Change device category
 - **Ignore as [category]**: Hide from current category only
 - **Ignore entirely**: Hide from both speaker and headphone lists
+- **Never Use / Allow Use**: Keep a device listed but never auto-select it
 - **Forget Device**: Remove disconnected device from memory
 
 ### Edit Mode
@@ -94,9 +94,11 @@ Click "Edit" in the footer to:
 AudioPriorityBar/
 ├── AudioPriorityBarApp.swift    # App entry, MenuBarExtra, AudioManager
 ├── Models/
-│   └── AudioDevice.swift        # Device model, OutputCategory enum
+│   ├── AudioDevice.swift        # Device model, OutputCategory enum
+│   └── Headphones.swift         # Name keywords that mark a device as headphones
 ├── Services/
 │   ├── AudioDeviceService.swift # CoreAudio wrapper
+│   ├── LaunchAtLoginManager.swift # Login item toggle
 │   └── PriorityManager.swift    # Priority persistence
 └── Views/
     ├── MenuBarView.swift        # Main popover UI
